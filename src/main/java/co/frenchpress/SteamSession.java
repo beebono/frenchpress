@@ -48,6 +48,17 @@ public final class SteamSession {
   /** Spiral Knights' Steam AppID. */
   public static final int SK_APPID = 99900;
 
+  /**
+   * How long to wait for the user to approve a sign-in before giving up.
+   * Steam drops the CM WebSocket on its own at ~64–69s of an unanswered
+   * device-confirmation poll (observed; likely a server heartbeat/idle timeout),
+   * which surfaces as a CancellationException out of pollingWaitForResult. We cut
+   * just under that so the timeout path runs first and tears down via our own
+   * user-initiated disconnect — a clean abort instead of that server-side drop.
+   * (Drop toward ~55s if a CancellationException ever still sneaks in.)
+   */
+  private static final long AUTH_WAIT_SECONDS = 60;
+
   /** @return the active session, logging in on first call. Returns null if login fails or the user chose a web account. */
   public static synchronized SteamSession get () {
     if (INSTANCE == null && !LOGIN_ATTEMPTED) {
@@ -213,14 +224,23 @@ public final class SteamSession {
     pump.start();
 
     System.err.println("[frenchpress] connecting to Steam...");
-    client.connect();
+    // Keep-alive bracket: on Android the host process is killed when the user
+    // tabs out to approve the sign-in (Steam Mobile App push, or reading a Steam
+    // Guard code), which aborts the poll below and forces a fresh login next
+    // launch. setKeepAlive(true) raises the process priority so it survives the
+    // tab-out; it must be ON before the flow can prompt the user, and OFF again
+    // on EVERY exit (success, failure, the timeout, the interrupt path) so
+    // a backgrounded launcher still dies normally the rest of the time.
     try {
-      // 120s gives the user time to approve a Steam Mobile App push prompt.
-      if (!done.await(120, TimeUnit.SECONDS)) {
-        System.err.println("[frenchpress] login timed out after 120s");
+      setKeepAlive(true);
+      client.connect();
+      if (!done.await(AUTH_WAIT_SECONDS, TimeUnit.SECONDS)) {
+        System.err.println("[frenchpress] login timed out after " + AUTH_WAIT_SECONDS + "s");
       }
     } catch (InterruptedException ie) {
       Thread.currentThread().interrupt();
+    } finally {
+      setKeepAlive(false);
     }
 
     if (!ok[0]) {
@@ -230,6 +250,27 @@ public final class SteamSession {
     }
     System.err.println("[frenchpress] attempt() returning session; steamID=" + session.steamId);
     return session;
+  }
+
+  /**
+   * Toggles the Android sign-in keep-alive via SkBootstrap.nativeSteamKeepAlive,
+   * reached by reflection because frenchpress runs in SK's classloader and must
+   * target the system-loader SkBootstrap whose natives sklauncher.c registered —
+   * the same hop {@link PushAuthenticator#emitLaunchStatus} uses. No-op (logged)
+   * off Android or before native registration, so desktop logins are unaffected.
+   */
+  private static void setKeepAlive (boolean active) {
+    try {
+      Class<?> sysBoot = Class.forName(
+          "com.skarm.launcher.bootstrap.SkBootstrap",
+          false,
+          ClassLoader.getSystemClassLoader());
+      Method m = sysBoot.getDeclaredMethod("nativeSteamKeepAlive", boolean.class);
+      m.setAccessible(true);
+      m.invoke(null, active);
+    } catch (Throwable t) {
+      System.err.println("[frenchpress] keep-alive bridge unavailable: " + t);
+    }
   }
 
   // -------------------------------------------------------------------------
