@@ -54,6 +54,8 @@ public class CryptoHelper {
      */
     public static final String SEC_PROV = "FrenchpressJCE";
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     public static byte[] shaHash(MessageDigest digest, byte[] input) {
         if (input == null) {
             throw new IllegalArgumentException("input is null");
@@ -76,9 +78,8 @@ public class CryptoHelper {
     }
 
     public static byte[] generateRandomBlock(int size) {
-        SecureRandom random = new SecureRandom();
         byte[] b = new byte[size];
-        random.nextBytes(b);
+        SECURE_RANDOM.nextBytes(b);
         return b;
     }
 
