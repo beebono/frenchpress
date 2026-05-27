@@ -109,10 +109,10 @@ public class CryptoHelper {
         if (key == null) {
             throw new IllegalArgumentException("key is null");
         }
+        if (key.length != 32) {
+            throw new IllegalArgumentException("SymmetricDecrypt used with non 32 byte key!");
+        }
         try {
-            if (key.length != 32) {
-                logger.debug("SymmetricDecrypt used with non 32 byte key!");
-            }
             // Step 1: the first 16 bytes are the IV, itself AES/ECB-encrypted with the key.
             Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding");
             byte[] cryptedIv = Arrays.copyOfRange(input, 0, 16);
