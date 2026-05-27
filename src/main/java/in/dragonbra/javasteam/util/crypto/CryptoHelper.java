@@ -65,13 +65,22 @@ public class CryptoHelper {
         return digest.digest(input);
     }
 
+    private static final ThreadLocal<MessageDigest> SHA1_DIGEST = ThreadLocal.withInitial(() -> {
+        try {
+            return MessageDigest.getInstance("SHA-1");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-1 algorithm not found", e);
+        }
+    });
+
     // NoSuchProviderException kept in the signature for binary compatibility with
     // upstream callers, even though the default-provider lookup never throws it.
     public static byte[] shaHash(byte[] input) throws NoSuchAlgorithmException, NoSuchProviderException {
         if (input == null) {
             throw new IllegalArgumentException("input is null");
         }
-        MessageDigest sha = MessageDigest.getInstance("SHA-1");
+        MessageDigest sha = SHA1_DIGEST.get();
+        sha.reset();
         return sha.digest(input);
     }
 
