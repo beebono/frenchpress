@@ -14,6 +14,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPublicKeySpec;
 import java.security.interfaces.RSAPublicKey;
+import java.util.AbstractList;
 import java.util.ArrayList;
 
 /**
@@ -38,11 +39,17 @@ public class RSACrypto {
             throw new IllegalArgumentException("key is null");
         }
         try {
-            ArrayList<Byte> list = new ArrayList<>();
-            for (byte b : key) {
-                list.add(b);
-            }
-            AsnKeyParser keyParser = new AsnKeyParser(list);
+            AsnKeyParser keyParser = new AsnKeyParser(new AbstractList<Byte>() {
+                @Override
+                public Byte get(int index) {
+                    return key[index];
+                }
+
+                @Override
+                public int size() {
+                    return key.length;
+                }
+            });
             BigInteger[] keys = keyParser.parseRSAPublicKey();
             init(keys[0], keys[1]);
         } catch (BerDecodeException e) {
